@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: research
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d research"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://app:app@db:5432/research
+      RUN_WORKER: "1"                 # 后台导出 Worker；演示脚本建议改为 "0" 手动驱动
+      EXPORT_WORKER_INTERVAL_SECONDS: "4"
+      EXPORT_WORKER_DELAY_SECONDS: "3" # 执行窗口时长，便于观察"撤回 vs 导出"并发
+      DOWNLOAD_LINK_TTL_HOURS: "72"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    environment:
+      API_URL: http://backend:8000          # 服务端组件走内网
+      NEXT_PUBLIC_API_URL: http://localhost:8000  # 浏览器直连（构建期内联，需指向已发布端口）
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
